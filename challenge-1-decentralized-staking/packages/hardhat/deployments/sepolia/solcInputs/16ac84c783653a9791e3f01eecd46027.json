@@ -1,0 +1,38 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/ExampleExternalContract.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.4;  //Do not change the solidity version as it negativly impacts submission grading\n\ncontract ExampleExternalContract {\n\n  bool public completed;\n\n  function complete() public payable {\n    completed = true;\n  }\n\n}\n"
+    },
+    "contracts/Staker.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.4;\n\nimport \"./ExampleExternalContract.sol\";\n\ncontract Staker {\n  ExampleExternalContract public exampleExternalContract;\n\n  mapping (address => uint256) public balances;\n\n  uint256 public constant threshold = 1 ether;\n\n  /// Staking deadline\n  uint256 public deadline = block.timestamp + 72 hours;\n\n  /// Boolean set if threshold is not reached by the deadline\n  bool public openForWithdraw;\n\n  event Stake(address indexed sender, uint256 indexed value);\n\n  // MODIFIERS\n  /// Modifier that checks whether the required deadline has passed\n  modifier deadlinePassed(bool requireDeadlinePassed) {\n    uint256 timeRemaining = timeLeft();\n    if (requireDeadlinePassed) {\n      require(timeRemaining <= 0, \"Deadline has not been passed yet\");\n    } else {\n      require(timeRemaining > 0, \"Deadline is already passed\");\n    }\n    _;\n  }\n\n  /// Modifier that checks whether the external contract is completed\n  modifier stakingNotCompleted() {\n    bool completed = exampleExternalContract.completed();\n    require(!completed, \"Staking period has completed\");\n    _;\n  }\n\n  constructor(address exampleExternalContractAddress)  {\n      exampleExternalContract = ExampleExternalContract(exampleExternalContractAddress);\n  }\n\n  // Collect funds in a payable `stake()` function and track individual `balances` with a mapping:\n  //  ( make sure to add a `Stake(address,uint256)` event and emit it for the frontend <List/> display )\n  function stake() public payable deadlinePassed(false) stakingNotCompleted {\n    // update the sender's balance\n    balances[msg.sender] += msg.value;\n\n    // emit Stake event to notify the UI\n    emit Stake(msg.sender, msg.value);\n  }\n\n\n  // After some `deadline` allow anyone to call an `execute()` function\n  //  It should either call `exampleExternalContract.complete{value: address(this).balance}()` to send all the value\n  function execute() public stakingNotCompleted {\n    uint256 contractBalance = address(this).balance;\n    if (contractBalance >= threshold) {\n      // if the `threshold` is met, send the balance to the externalContract\n      exampleExternalContract.complete{value: contractBalance}();\n    } else {\n      // if the `threshold` was not met, allow everyone to call a `withdraw()` function\n      openForWithdraw = true;\n    }\n  }\n\n\n\n  // Add a `withdraw(address payable)` function lets users withdraw their balance\n  function withdraw() public deadlinePassed(true) stakingNotCompleted {\n    \n      uint256 userBalance = balances[msg.sender];\n\n      // reset the sender's balance\n      balances[msg.sender] = 0;\n\n      // transfer sender's balance to the `_to` address\n      (bool sent, ) = msg.sender.call{value: userBalance}(\"\");\n      \n      // check the amount staked did not reach the threshold by the deadline\n      require(openForWithdraw && userBalance > 0 && sent, \"Withdrawal fail\");\n  }\n\n  /// Add a `timeLeft()` view function that returns the time left before the deadline for the frontend\n  function timeLeft() public view returns (uint256) {\n      if (block.timestamp >= deadline) {\n          return 0;\n      } else {\n          return deadline - block.timestamp;\n      }\n  }\n\n\n  // Add the `receive()` special function that receives eth and calls stake()\n  receive() external payable {\n      stake();\n  }\n}"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
